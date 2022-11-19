@@ -10,7 +10,8 @@
 
 With the pod name, you can get the logs as shown below. Replace the pod name with your pod name.
 
-kubectl
+```
+kubectl apply -f jenkins-deploy.yaml -f 
 
 ```
 kubectl logs jenkins-deployment-2539456353-j00w5 --namespace=devops-tools
