@@ -1,0 +1,22 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    kubernetes.io/ingress.class: "nginx"    
+  name: prometheus-ingress
+spec:
+  rules:
+  - host: prometheus.kubeshore.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service: 
+            name: prometheus-server-np
+            port: 
+              number: 80
+  tls:
+  - hosts:
+    - prometheus.kubeshore.com
+    secretName: prometheus-tls
