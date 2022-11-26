@@ -2,8 +2,10 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   annotations:
-    kubernetes.io/ingress.class: "nginx"    
-  name: grafana-ingress
+    kubernetes.io/ingress.class: "nginx"
+    cert-manager.io/cluster-issuer: letsencrypt-production
+  name: grafana
+  namespace: grafana
 spec:  
   rules:
   - host: grafana.kubeshore.com
@@ -13,7 +15,7 @@ spec:
         pathType: Prefix
         backend:
           service: 
-            name: grafana-np
+            name: grafana
             port: 
               number: 80
   tls:

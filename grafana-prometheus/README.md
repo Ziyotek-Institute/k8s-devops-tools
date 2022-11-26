@@ -60,6 +60,24 @@ minikube addons enable ingress
 kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.5.1/deploy/static/provider/aws/deploy.yaml
 ```
 
+```bash
+export EKS_CLUSTER_NAME=""
+export EKS_CLUSTER_REGION=""
+```
+
+## Enable aws-ebs-csi addon for managing dynamic provisioning of aws ebs volume ##
+
+```bash
+eksctl create iamserviceaccount \
+  --name ebs-csi-controller-sa \
+  --namespace kube-system \
+  --cluster $EKS_CLUSTER_NAME \
+  --attach-policy-arn arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy \
+  --approve \
+  --role-only \
+  --role-name AmazonEKS_EBS_CSI_DriverRole
+```
+
 **1.** Install Prometheus and Install Grafana
 
 * We’ll start by adding the repository to our helm configuration:
@@ -72,29 +90,47 @@ helm repo add grafana https://grafana.github.io/helm-charts
 * Once the repo is ready, we can install the provided charts by running the following commands:
 
 ```bash
-helm install prometheus prometheus-community/prometheus
-helm install grafana grafana/grafana
+helm install prometheus prometheus-community/prometheus \
+    --namespace prometheus \
+    --set alertmanager.persistentVolume.storageClass="gp2" \
+    --set server.persistentVolume.storageClass="gp2" \
+    --set service.type=ClusterIP
 ```
 
-**2.** Expose the service via type NodePort if you do not have an ingress-controller
+* Create namespace for grafana
 
 ```bash
-kubectl expose service prometheus-server --type=NodePort --target-port=9090 --name=prometheus-server-np
-minikube service prometheus-server-np
-
-kubectl expose service grafana --type=NodePort --target-port=3000 --name=grafana-np
-minikube service grafana-np
+kubectl create namespace grafana
 ```
 
-**Best-Practice** We can add an ```kind: Ingress``` object and configure a [FQDN](https://en.wikipedia.org/wiki/Fully_qualified_domain_name) value for the host key. The ingress controller will match incoming HTTP traffic, and route it to the appropriate backend service based on the host key.
+**checkout** [grafana.yaml](grafana.yaml) consists of configuration settings of prometheus as a data_source for grafana.
+
+```yaml
+datasources:
+  datasources.yaml:
+    apiVersion: 1
+    datasources:
+    - name: Prometheus
+      type: prometheus
+      url: http://prometheus-server.prometheus.svc.cluster.local
+      access: proxy
+      isDefault: true
+```
+
+```bash
+helm install grafana grafana/grafana \
+    --namespace grafana \
+    --set persistence.storageClassName="gp2" \
+    --set persistence.enabled=true \
+    --set adminPassword='EKS!sAWSome' \
+    --values ./grafana.yaml \
+    --set service.type=ClusterIP
+```
+
+**2.** We can add an ```kind: Ingress``` object and configure a [FQDN](https://en.wikipedia.org/wiki/Fully_qualified_domain_name) value for the host key. The ingress controller will match incoming HTTP traffic, and route it to the appropriate backend service based on the host key.
 First expose the services via type ClusterIP.
 
-* Expose Grafana and Prometheus Services via type ClusterIP. Create the service resource manifest files [service-prometheus.yaml](service-prometheus.yaml) [service-grafana.yaml](service-grafana.yaml)
-
-```bash
-kubectl apply -f service-prometheus.yaml
-kubectl apply -f service-grafana.yaml
-```
+**NOTE!** Grafana and Prometheus Services where created via helm during creation of grafana . Similar resource manifest files can be viewed in this repo, apply in case services have not been created [service-prometheus.yaml](service-prometheus.yaml) [service-grafana.yaml](service-grafana.yaml)
 
 * Create an ingress resource manifest files [ingress-prometheus.yaml](ingress-prometheus.yaml) [ingress-grafana.yaml](ingress-grafana.yaml)
 
@@ -132,8 +168,8 @@ kubectl delete -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/con
 
 # clean up individual component
 
-helm uninstall prometheus prometheus-community/prometheus    
-helm uninstall grafana grafana/grafana
+helm uninstall prometheus prometheus-community/prometheus  --namepsace prometheus
+helm uninstall grafana grafana/grafana --namespace grafana
 
 # If you provisioned minikube cluster
 minikube delete
