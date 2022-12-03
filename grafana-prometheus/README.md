@@ -40,19 +40,16 @@ choco install kubernetes-helm
 
  **B.** Choose your Kubernetes Cluster
 
-* [Minikube](https://github.com/kubernetes/minikube)
-
 * [eks_ctl](https://eksctl.io/) follow for more details [AWS_EKS](https://docs.aws.amazon.com/eks/latest/userguide/getting-started-eksctl.html)
+
+```bash
+eksctl create cluster -f cluster.yaml
+eksctl delete cluster -f cluster.yaml
+```
 
 * [Kind](https://kind.sigs.k8s.io/docs/user/quick-start/)
 
 **IMPORTANT:** Provision ingress-controller in your Kubernetes cluster.
-
-* For Minikube create ingress-controller using available minikube addons
-
-```bash
-minikube addons enable ingress
-```
 
 * For any other kubernetes clusters Create nginx-ingress-controller from Web URL
 
@@ -78,6 +75,23 @@ eksctl create iamserviceaccount \
   --role-name AmazonEKS_EBS_CSI_DriverRole
 ```
 
+```bash
+EBS_ROLE_ARN=$(aws iam get-role --role-name AmazonEKS_EBS_CSI_DriverRole --query Role.Arn --output text)
+```
+
+To deploy the CSI driver:
+
+```bash
+kubectl apply -k "github.com/kubernetes-sigs/aws-ebs-csi-driver/deploy/kubernetes/overlays/stable/?ref=release-1.13"
+```
+
+```bash
+kubectl patch serviceaccount "ebs-csi-controller-sa" --namespace kube-system --patch \
+ "{\"metadata\": { \"annotations\": { \"eks.amazonaws.com/role-arn\": \"$EBS_CSI_ROLE_ARN\" }}}"
+kubectl patch serviceaccount "ebs-csi-node-sa" --namespace kube-system --patch \
+ "{\"metadata\": { \"annotations\": { \"eks.amazonaws.com/role-arn\": \"$EBS_CSI_ROLE_ARN\" }}}"
+```
+
 **1.** Install Prometheus and Install Grafana
 
 * We’ll start by adding the repository to our helm configuration:
@@ -90,10 +104,16 @@ helm repo add grafana https://grafana.github.io/helm-charts
 * Once the repo is ready, we can install the provided charts by running the following commands:
 
 ```bash
+kubectl create namespace prometheus
+```
+
+```bash
 helm install prometheus prometheus-community/prometheus \
     --namespace prometheus \
     --set alertmanager.persistentVolume.storageClass="gp2" \
+    --set alertmanager.persistentVolume.size="8Gi" \
     --set server.persistentVolume.storageClass="gp2" \
+    --set server.persistentVolume.size="8Gi" \
     --set service.type=ClusterIP
 ```
 
@@ -123,8 +143,22 @@ helm install grafana grafana/grafana \
     --set persistence.storageClassName="gp2" \
     --set persistence.enabled=true \
     --set adminPassword='EKS!sAWSome' \
+    --set persistence.size="8Gi" \
     --values ./grafana.yaml \
     --set service.type=ClusterIP
+```
+
+**IMPORTANT** Validate the Status of persistentvolumeclaim, should be ```BOUND```
+
+```bash
+$ kubectl get sc,pvc -A 
+NAME                                        PROVISIONER             RECLAIMPOLICY   VOLUMEBINDINGMODE      ALLOWVOLUMEEXPANSION   AGE
+storageclass.storage.k8s.io/gp2 (default)   kubernetes.io/aws-ebs   Delete          WaitForFirstConsumer   false                  12h
+
+NAMESPACE    NAME                                                      STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS   AGE
+prometheus   persistentvolumeclaim/prometheus-server                   Bound    pvc-b8e00e8d-20c9-41ad-9dd3-a95448a9df90   8Gi        RWO            gp2            6m53s
+prometheus   persistentvolumeclaim/storage-prometheus-alertmanager-0   Bound    pvc-05519ffb-c2c7-4d32-b6ad-eba02d92ddd4   2Gi        RWO            gp2            6m53s
+
 ```
 
 **2.** We can add an ```kind: Ingress``` object and configure a [FQDN](https://en.wikipedia.org/wiki/Fully_qualified_domain_name) value for the host key. The ingress controller will match incoming HTTP traffic, and route it to the appropriate backend service based on the host key.
@@ -138,6 +172,20 @@ First expose the services via type ClusterIP.
 kubectl apply -f ingress-prometheus.yaml
 kubectl apply -f ingress-grafana.yaml
 ```
+
+###Get external-dns pod logs ```kubectl logs deployment/external-dns```
+
+```bash
+time="2022-12-03T18:00:26Z" level=info msg="Desired change: CREATE prometheus.kubeshore.com A [Id: /hostedzone/Z0018530333ZM5MP7G8FQ]"
+time="2022-12-03T18:00:26Z" level=info msg="Desired change: CREATE prometheus.kubeshore.com TXT [Id: /hostedzone/Z0018530333ZM5MP7G8FQ]"
+time="2022-12-03T18:00:26Z" level=info msg="2 record(s) in zone kubeshore.com. [Id: /hostedzone/Z0018530333ZM5MP7G8FQ] were successfully updated"
+...
+...
+...
+time="2022-12-03T18:09:30Z" level=info msg="Desired change: CREATE grafana.kubeshore.com A [Id: /hostedzone/Z0018530333ZM5MP7G8FQ]"
+time="2022-12-03T18:09:30Z" level=info msg="Desired change: CREATE grafana.kubeshore.com TXT [Id: /hostedzone/Z0018530333ZM5MP7G8FQ]"time="2022-12-03T18:09:30Z" level=info msg="2 record(s) in zone kubeshore.com. [Id: /hostedzone/Z0018530333ZM5MP7G8FQ] were successfully updated"
+```
+
 
 **3.** Access Grafana Dashboard
 
