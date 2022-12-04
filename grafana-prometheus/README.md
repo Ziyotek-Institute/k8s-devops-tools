@@ -76,7 +76,7 @@ eksctl create iamserviceaccount \
 ```
 
 ```bash
-EBS_ROLE_ARN=$(aws iam get-role --role-name AmazonEKS_EBS_CSI_DriverRole --query Role.Arn --output text)
+EBS_CSI_ROLE_ARN=$(aws iam get-role --role-name AmazonEKS_EBS_CSI_DriverRole --query Role.Arn --output text)
 ```
 
 To deploy the CSI driver:
