@@ -99,6 +99,7 @@ kubectl patch serviceaccount "ebs-csi-node-sa" --namespace kube-system --patch \
 ```bash
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
 helm repo add grafana https://grafana.github.io/helm-charts
+helm repo update
 ```
 
 * Once the repo is ready, we can install the provided charts by running the following commands:
@@ -161,6 +162,14 @@ prometheus   persistentvolumeclaim/storage-prometheus-alertmanager-0   Bound    
 
 ```
 
+**Important** if you are deleting the prometheus or grafana resources to start from scratch, and you have Pending persistent volume claims, then delete previoiusly requested persistent volume claims
+
+```bash
+kubectl delete pvc persistentvolumeclaim/storage-prometheus-alertmanager-0 
+kubectl delete pvc persistentvolumeclaim/prometheus-server 
+kubectl delete pvc persistentvolumeclaim/grafana
+```
+
 **2.** We can add an ```kind: Ingress``` object and configure a [FQDN](https://en.wikipedia.org/wiki/Fully_qualified_domain_name) value for the host key. The ingress controller will match incoming HTTP traffic, and route it to the appropriate backend service based on the host key.
 First expose the services via type ClusterIP.
 
@@ -206,6 +215,44 @@ The Grafana server can be accessed via [FQDN](https://en.wikipedia.org/wiki/Full
 
 * We head to Create (+) > Import section to Import via grafana.com and we set 6417 and 1860 into the id field and click Load.
 * In the dashboard configuration we need to select the Prometheus Datasource we created in the earlier step.
+
+### Values for prometheus-server configmap ###
+
+<!-- ```bash
+        job_name: ingress-nginx
+        scrape_interval: 10s
+        metrics_path: '/metrics'
+        kubernetes_sd_configs:
+        - role: pod
+          namespaces:
+            names:
+            - ingress-nginx
+          selectors:
+          - role: "pod"
+            label: "app.kubernetes.io/name=ingress-nginx"   
+        job_name: cert-manager
+        scrape_interval: 10s
+        metrics_path: '/metrics'
+        kubernetes_sd_configs:
+        - role: pod
+          namespaces:
+            names:
+            - cert-manager
+          selectors:
+          - role: "pod"
+            label: "app=cert-manager"
+        job_name: external-dns
+        scrape_interval: 10s
+        metrics_path: '/metrics'
+        kubernetes_sd_configs:
+        - role: pod
+          namespaces:
+            names:
+            - default
+          selectors:
+          - role: "pod"
+            label: "app.kubernetes.io/name=external-dns"  
+``` -->
 
 **6.** Clean Up
 
